@@ -3,9 +3,11 @@
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 import os
 
 # Caminhos para os dados pré-processados
@@ -35,20 +37,30 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
 
-# Treinar o modelo XGBoost para Regressão
-print("Treinando o modelo XGBoost para regressão...")
-model = XGBRegressor(
-    n_estimators=100,
-    max_depth=6,
-    learning_rate=0.1,
-    random_state=42,
-    objective="reg:squarederror"
-)
-model.fit(X_train, y_train)
+# Pipeline de pré-processamento e modelo
+pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+    ('xgb', XGBRegressor(objective="reg:squarederror", random_state=42))
+])
+
+# Parâmetros para GridSearchCV
+param_grid = {
+    'xgb__n_estimators': [100, 200],
+    'xgb__max_depth': [6, 10],
+    'xgb__learning_rate': [0.01, 0.1]
+}
+
+# GridSearchCV para ajuste de hiperparâmetros
+print("Iniciando GridSearchCV para ajuste de hiperparâmetros...")
+grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='neg_mean_squared_error', verbose=1, n_jobs=-1)
+grid_search.fit(X_train, y_train)
+
+# Melhor modelo
+best_model = grid_search.best_estimator_
 
 # Avaliação do modelo
 print("Avaliando o modelo...")
-y_pred = model.predict(X_test)
+y_pred = best_model.predict(X_test)
 mse = mean_squared_error(y_test, y_pred)
 print(f"\n=== Métricas de Avaliação ===")
 print(f"Erro Quadrático Médio (MSE): {mse:.4f}")
@@ -58,7 +70,7 @@ print(f"Raiz do Erro Quadrático Médio (RMSE): {np.sqrt(mse):.4f}")
 output_model_path = "/kaggle/working/preprocessed/20241121_102946/models/xgboost_regressor.joblib"
 os.makedirs(os.path.dirname(output_model_path), exist_ok=True)
 print(f"Salvando modelo treinado em: {output_model_path}")
-joblib.dump(model, output_model_path)
+joblib.dump(best_model, output_model_path)
 
 print("Treinamento concluído!")
 
